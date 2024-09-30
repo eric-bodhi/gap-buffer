@@ -1,80 +1,99 @@
+import typing
+import copy
+
+
 class GapBuffer:
-    def __init__(self, initString="", gapSize=5):
-        self.buffer = list(initString)
-        self.start = 0
-        self.end = self.start + gapSize
-        self.make_gap(self.start, self.end)
-        self.size = 5  # size of buffer for resizing
+    def __init__(self, nBytes: int = 16, initString: str = ""):
+        self.buffer = bytearray(nBytes)
+        initStrEncoded = initString.encode("utf-8")
+        self.buffer[: len(initString)] = initStrEncoded
+        self.gapStart = len(initString)
+        self.gapEnd = nBytes
+
+        self.initSize = nBytes
 
     def printBuffer(self):
-        print("".join(self.buffer))
-        print("start, end", self.start, self.end)
-        print("Length", len(self.buffer), self.end - self.start)
+        strBuffer = self.buffer.decode("utf-8")
+        print(
+            "".join(strBuffer[: self.gapStart])
+            + "["
+            + " " * (self.gapEnd - self.gapStart)
+            + "]"
+            + "".join(strBuffer[self.gapEnd :])
+        )
+        print(self.gapStart, self.gapEnd, len(self.buffer))
 
-    def insert(self, position, char):
-        if position < 0 or position > len(self.buffer):
+    def shiftGap(self, position: int):
+        if 0 > position or position > len(self.buffer):
             raise ValueError("Out of bounds")
 
-        if self.gap_size() <= 1:
-            self.resize(self.size * 2)
-        if self.start < position < self.end:  # is in gap
-            self.buffer[self.start] = char
-            self.start += 1
+        delta = position - self.gapStart
 
-        else:
-            self.move(position)
-            self.buffer[self.start] = char
-            self.start += 1
+        # if position is to the right
+        if delta > 0:
+            self.buffer[self.gapStart : self.gapStart + delta] = self.buffer[
+                self.gapEnd : self.gapEnd + delta
+            ]
 
-    def delete(self, position):
-        if 0 > position or position >= len(self.buffer):
+        # if position is to the left
+        elif delta < 0:
+            self.buffer[self.gapEnd + delta : self.gapEnd] = copy.deepcopy(
+                self.buffer[self.gapStart + delta : self.gapStart]
+            )
+
+        self.gapStart = position
+        self.gapEnd += delta
+
+    def resize(self, amount: int):
+        if amount < 0:
             raise ValueError("Out of bounds")
 
-        self.move(position)
-        self.buffer = self.buffer[: position + 1] + self.buffer[position + 1 :]
+        reqBuffSize = len(self.buffer) - (self.gapEnd - self.gapStart) + amount
+        newBuff = bytearray(reqBuffSize)
 
-    def set_cursor(self, new_cursor):
-        if 0 <= new_cursor <= len(self.buffer) - self.gap_size():
-            self.move(new_cursor)
+        newBuff[: self.gapStart] = self.buffer[: self.gapStart]
+        # gap already made newBuff[self.gapStart:self.gapStart+amount]
+        newBuff[self.gapStart + amount :] = self.buffer[self.gapEnd :]
 
-        else:
-            raise ValueError("Out of bounds")
+        self.buffer = newBuff
+        self.gapEnd = self.gapStart + amount
+        self.initSize = amount
 
-    def move(self, position):
-        # Move gap left
-        if position < self.start:
-            while position < self.start:
-                self.start -= 1
-                self.end -= 1
-                # Shift content from the left into the gap
-                self.buffer[self.end] = self.buffer[self.start]
-                self.buffer[self.start] = "_"
+    def insertChar(self, position: int, char):
+        if self.gapStart == self.gapEnd:
+            self.resize(self.initSize * 2)
 
-        # Move gap right
-        elif position > self.start:
-            while self.start < position:
-                # Shift content from the right into the gap
-                self.buffer[self.start] = self.buffer[self.end]
-                self.buffer[self.end] = "_"
-                self.start += 1
-                self.end += 1
+        self.shiftGap(position)
+        self.buffer[self.gapStart] = char
+        self.gapStart += 1
 
-    def resize(self, count):
-        newBuffer = ["_"] * count
-        pre = self.buffer[: self.start]
-        post = self.buffer[self.end :]
-
-        self.buffer = pre + newBuffer + post
-        self.end = self.start + count
-
-    def make_gap(self, start, end):
-        self.buffer = self.buffer[:start] + ["_"] * (end - start) + self.buffer[start:]
-
-    def gap_size(self):
-        return self.end - self.start
+    def delete(self, position: int, count: int):
+        self.shiftGap(position)
+        self.gapEnd = min(self.gapEnd + count, len(self.buffer))
 
 
-g = GapBuffer("This is the way out", 5)
-g.printBuffer()
-g.delete(6)
-g.printBuffer()
+gb = GapBuffer(2)
+
+# Insert examples
+gb.insertChar(0, 65)
+gb.printBuffer()
+gb.insertChar(0, 66)
+gb.printBuffer()  # Gap is empty
+gb.insertChar(0, 67)  # Gap has to resize
+gb.printBuffer()
+gb.insertChar(0, 68)
+gb.insertChar(0, 69)
+gb.insertChar(0, 70)
+gb.insertChar(0, 71)  # Gap has to resize again
+gb.printBuffer()
+
+print("--------")
+
+# Delete examples
+gb = GapBuffer(2)
+gb.printBuffer()
+gb.insertChar(0, 65)
+gb.insertChar(0, 66)  # Gap empty
+gb.printBuffer()
+gb.delete(0, 1)  # GapStart moved left one (decrement) to delete
+gb.printBuffer()

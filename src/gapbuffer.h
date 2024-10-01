@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <iostream>
 #include <iterator>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -32,6 +33,7 @@ private:
     class GapIterator {
     public:
         // std::conditional<condition, typeIfTrue, typeIfFalse>
+        // All necessary for using adapters and STL compatibility
         static const bool is_const =
             std::is_const_v<std::remove_pointer_t<PointerType>>;
         using iterator_category = std::contiguous_iterator_tag;
@@ -46,13 +48,15 @@ private:
 
         using pointer = PointerType;
         using reference = value_type&;
-        using difference_type = std::ptrdiff_t; // difference type of 2 iterators
+        using difference_type =
+            std::ptrdiff_t; // difference type of 2 iterators
         // difference between INDEXES NOT values
 
         gapbuffer_pointer gb;
         PointerType ptr;
 
         explicit GapIterator() = default;
+        // self = GapBuffer that will be iterated
         explicit GapIterator(gapbuffer_pointer self, PointerType input_ptr)
             : gb(self), ptr(input_ptr) {
         }
@@ -100,7 +104,8 @@ private:
         }
 
         // provides functionality for value + it
-        friend GapIterator operator+(const difference_type val, const GapIterator& other) {
+        friend GapIterator operator+(const difference_type val,
+                                     const GapIterator& other) {
             return other + val;
         }
 
@@ -130,7 +135,8 @@ private:
             return GapIterator(gb, ptr - other);
         }
 
-        friend GapIterator operator-(const difference_type value, const GapIterator& other) {
+        friend GapIterator operator-(const difference_type value,
+                                     const GapIterator& other) {
             return other - value;
         }
 
@@ -146,8 +152,12 @@ private:
 
         auto operator<=>(const GapIterator&) const = default;
 
-        reference operator*() { return *ptr; }
-        PointerType operator->() const { return &operator*(); }
+        reference operator*() {
+            return *ptr;
+        }
+        PointerType operator->() const {
+            return &operator*();
+        }
     };
 
     // Iterator member types
@@ -156,8 +166,139 @@ private:
     using reverse_iterator = std::reverse_iterator<iterator>;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
+public:
+    // https://en.cppreference.com/w/cpp/memory/uninitialized_copy_n
+    // allocated memory is uninitialized, cannot use std::copy yet
+    constexpr explicit GapBuffer() {
+        bufferStart = allocator_type().allocate(32);
+        bufferEnd = std::uninitialized_value_construct_n(bufferStart, 32);
+        gapStart = bufferStart;
+        gapEnd = bufferEnd;
+    }
+
+    constexpr explicit GapBuffer(const size_type& size) {
+        bufferStart = allocator_type().allocate(size);
+        bufferEnd = std::uninitialized_value_construct_n(bufferStart, size);
+        gapStart = bufferStart;
+        gapEnd = bufferEnd;
+    }
+
+    constexpr explicit GapBuffer(std::string_view& str) {
+        bufferStart = allocator_type().allocate(str.size() + 8); // str + gap
+        std::uninitialized_copy_n(str.begin(), str.end(), bufferStart);
+        gapStart = bufferStart + str.size();
+        gapEnd = gapStart + 8;
+
+        bufferEnd = gapEnd;
+    }
+
+    constexpr reference at(const size_type pos) {
+        if (pos >= size()) {
+            throw std::out_of_range("Out of bounds");
+        }
+
+        const size_type gapStartIndex =
+            static_cast<size_type>(gapStart - bufferStart);
+        if (pos < gapStartIndex) {
+            return *(bufferStart + pos);
+        } else if (pos > *gapStart) {
+            return *(gapEnd + (pos - (gapStart - bufferStart)));
+        } else {
+            throw std::out_of_range("Pos cannot be in gap");
+        }
+    }
+
+    constexpr reference at(const size_type pos) const {
+        if (pos >= size()) {
+            throw std::out_of_range("Out of bounds");
+        }
+
+        const size_type gapStartIndex =
+            static_cast<size_type>(gapStart - bufferStart);
+        if (pos < gapStartIndex) {
+            return *(bufferStart + pos);
+        } else if (pos > *gapStart) {
+            return *(gapEnd + (pos - (gapStart - bufferStart)));
+        } else {
+            throw std::out_of_range("Pos cannot be in gap");
+        }
+    }
+
+    iterator begin() noexcept {
+        return iterator(this, bufferStart);
+    }
+
+    const_iterator begin() const noexcept {
+        return const_iterator(this, bufferStart);
+    }
+
+    const_iterator cbegin() const noexcept {
+        return const_iterator(this, bufferStart);
+    }
+
+    iterator end() noexcept {
+        return reverse_iterator(this, bufferEnd);
+    }
+
+    const_iterator end() const noexcept {
+        return const_reverse_iterator(this, bufferEnd);
+    }
+
+    const_iterator cend() const noexcept {
+        return const_reverse_iterator(this, bufferEnd);
+    }
+
+    // reverse iterators
+    reverse_iterator rbegin() noexcept {
+        return reverse_iterator(
+            iterator(this, (gapEnd == bufferEnd) ? gapStart : bufferEnd));
+    }
+
+    const_reverse_iterator rbegin() const noexcept {
+        return const_reverse_iterator(
+            iterator(this, (gapEnd == bufferEnd) ? gapStart : bufferEnd));
+    }
+
+    reverse_iterator rend() noexcept {
+        return reverse_iterator(
+            iterator(this, (gapStart == bufferStart) ? gapEnd : bufferStart));
+    }
+
+    const_reverse_iterator rend() const noexcept {
+        return const_reverse_iterator(
+            iterator(this, (gapStart == bufferStart) ? gapEnd : bufferStart));
+    }
+
+    // size ignoring the gap
+    constexpr size_type size() {
+        return bufferEnd - bufferStart - (gapEnd - gapStart);
+    }
+
+    constexpr size_type gapSize() {
+        return gapEnd - gapStart;
+    }
+
+    constexpr size_type capacity() {
+        return bufferEnd - bufferStart;
+    }
+
+    // cannot be string_view because sv locally dangles
+    constexpr std::string to_string() {
+        std::string ret;
+        ret.reserve(size()); // reserve size of buffer w/o gap for performance
+
+        auto cIt = const_iterator(this, bufferStart);
+        size_t index = 0;
+        while (cIt != bufferEnd) {
+            ret[index++] = *cIt++;
+        }
+
+        return ret;
+    }
+
 private:
-    // raw pointer over
+    // raw pointers like a "raw iterator"
+    // support arithmetic and everything but unsafe and less functionality
     pointer bufferStart = nullptr;
     pointer gapStart = nullptr;
     pointer gapEnd = nullptr;

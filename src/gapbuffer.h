@@ -275,11 +275,39 @@ public:
     }
 
     constexpr size_type gapSize() {
-        return gapEnd - gapStart;
+        return static_cast<size_type>(gapEnd - gapStart);
     }
 
     constexpr size_type capacity() {
         return bufferEnd - bufferStart;
+    }
+
+    constexpr void clear() noexcept {
+        std::destroy_n(bufferStart, capacity());
+        gapStart = bufferStart;
+        gapEnd = bufferEnd;
+    }
+
+    constexpr void resize(const size_type count) {
+        if (count <= size()) {
+            return;
+        }
+
+        pointer newMem =
+            allocator_type().allocate(count); // acts as newBufferStart
+
+        size_type prefixSize = gapStart - bufferStart;
+        size_type suffixSize = bufferEnd - gapEnd;
+        std::uninitialized_copy_n(bufferStart, prefixSize, newMem);
+        std::uninitialized_copy_n(gapEnd, suffixSize,
+                                  newMem + prefixSize + (count - capacity()));
+
+        allocator_type().deallocate(bufferStart, capacity());
+
+        gapStart = newMem + prefixSize;
+        gapEnd = gapStart + (count - capacity());
+        bufferStart = newMem;
+        bufferEnd = newMem + count;
     }
 
     // cannot be string_view because sv locally dangles
@@ -294,6 +322,51 @@ public:
         }
 
         return ret;
+    }
+
+    constexpr void insert(iterator pos, const_reference value) {
+        if (gapSize() <= 1) {
+            int posLen = pos - begin();
+            resize(capacity() * 2);
+            pos = begin() + posLen + 1;
+        }
+
+        std::uninitialized_copy_n(pos.ptr, gapStart - pos.ptr,
+                                  pos.ptr + 1); // move [pos, end) over 1
+        *pos.ptr = value;
+    }
+
+    constexpr void insert(iterator pos, std::string_view str) {
+        if (gapSize() <= str.size()) {
+            int posLen = pos - begin();
+            resize(capacity() * 2);
+            pos = begin() + posLen + 1;
+        }
+
+        std::uninitialized_copy_n(
+            pos.ptr, gapStart - pos.ptr,
+            pos.ptr + str.size()); // move [pos, end) over length of str
+        std::copy(str.begin(), str.end(),
+                  pos.ptr); // copy string to space of length str made
+        gapStart += str.size();
+    }
+
+    constexpr void erase(iterator pos) {
+        std::copy(pos.ptr + 1, gapStart, pos.ptr);
+        --gapStart;
+    }
+
+    constexpr void erase(iterator pos, const size_type count) {
+        std::copy(pos.ptr + count, gapStart, pos.ptr);
+        gapStart -= count;
+    }
+
+    constexpr void push_back(const T& value) {
+        if (gapStart == gapEnd) {
+            resize(capacity() * 2);
+        }
+        *gapStart = value;
+        gapStart++;
     }
 
 private:

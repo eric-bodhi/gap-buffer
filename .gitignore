@@ -1,6 +1,67 @@
-*.idea
-cmake-build-debug
-build
+# Build directories
+/build/
+bin/
+obj/
+lib/
+
+# Executable files
+*.exe
+*.out
+*.app
+*.dll
+*.so
+*.dylib
+
+# Object files
 *.o
-result
-main.cpp
+*.obj
+
+# Precompiled headers
+*.gch
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Visual Studio
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.user
+*.userosscache
+*.suo
+*.cache
+*.ipch
+.vs/
+*.pdb
+
+# Code::Blocks
+*.layout
+*.depend
+*.cbp
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+*.xcuserstate
+
+# Qt Creator
+*.pro.user
+*.pro.user.*
+
+# Eclipse
+.settings/
+bin/
+*.launch
+
+# CLion
+.idea/
+*.iml
+
+# Other files
+*.log
+*.tmp
+*.temp
+*.

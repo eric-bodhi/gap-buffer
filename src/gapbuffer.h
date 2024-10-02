@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <alloca.h>
 #include <cstddef>
 #include <iostream>
 #include <iterator>
@@ -33,7 +34,8 @@ private:
     class GapIterator {
     public:
         // std::conditional<condition, typeIfTrue, typeIfFalse>
-        // All necessary for using adapters and STL compatibility
+        // All necessary for using adapters (std::reverse_iterator<it>) + STL
+        // compatibilty
         static const bool is_const =
             std::is_const_v<std::remove_pointer_t<PointerType>>;
         using iterator_category = std::contiguous_iterator_tag;
@@ -150,8 +152,6 @@ private:
             return *this;
         }
 
-        auto operator<=>(const GapIterator&) const = default;
-
         reference operator*() {
             return *ptr;
         }
@@ -184,7 +184,8 @@ public:
     }
 
     constexpr explicit GapBuffer(std::string_view& str) {
-        bufferStart = allocator_type().allocate(str.size() + 8); // str + gap
+        bufferStart =
+            allocator_type().allocate(str.size() + 8); // str + gap (length 8)
         std::uninitialized_copy_n(str.begin(), str.end(), bufferStart);
         gapStart = bufferStart + str.size();
         gapEnd = gapStart + 8;
@@ -192,11 +193,95 @@ public:
         bufferEnd = gapEnd;
     }
 
+    template <typename It>
+    constexpr explicit GapBuffer(It start, It end) {
+        const size_type len = std::distance(start, end);
+
+        bufferStart =
+            allocator_type().allocate(len + 8); // range + gab (length 8)
+        std::uninitialized_copy_n(start, len, bufferStart);
+
+        gapStart = bufferStart + len;
+        gapEnd = gapStart + 8;
+        bufferEnd = gapEnd;
+    }
+
+    // Copy Constructor
+    // new instance = copy of other instance
+    constexpr GapBuffer(const GapBuffer& other) {
+        bufferStart = allocator_type().allocate(other.capacity());
+        std::uninitialized_copy_n(other.bufferStart, other.capacity(),
+                                  bufferStart);
+
+        gapStart =
+            bufferStart +
+            (other.gapStart - other.bufferStart); // subtracting bufferStart
+                                                  // necessary for the offset
+        gapEnd = bufferStart + (other.gapEnd - other.bufferStart); // same here
+        bufferEnd = bufferStart + other.capacity();
+    }
+
+    // Copy Assignment
+    // initialized instance = copy of other instance
+    constexpr GapBuffer& operator=(const GapBuffer& other) {
+        if (this != &other) {
+            pointer newBuffStart = allocator_type().allocate(other.capacity());
+            std::uninitialized_copy_n(other.bufferStart, other.capacity(),
+                                      newBuffStart);
+
+            std::destroy_n(bufferStart, capacity());
+            allocator_type().deallocate(bufferStart, capacity());
+
+            bufferStart = newBuffStart;
+            gapStart = newBuffStart + (other.gapStart - other.bufferStart);
+            gapEnd = newBuffStart + (other.gapEnd - other.bufferStart);
+            bufferEnd = newBuffStart + other.capacity();
+        }
+
+        return *this;
+    }
+
+    // Move Constructor
+    // new instance = std::move(other instance)
+    constexpr GapBuffer(GapBuffer&& other) noexcept
+        : bufferStart(other.bufferStart), gapStart(other.gapStart),
+          gapEnd(other.gapEnd), bufferEnd(other.bufferEnd) {
+        other.bufferStart = nullptr;
+        other.gapStart = nullptr;
+        other.gapEnd = nullptr;
+        other.bufferEnd = nullptr;
+    }
+
+    // Move Assignment
+    // initialized instance = std::move(other instance)
+    constexpr GapBuffer& operator=(GapBuffer&& other) noexcept {
+        if (this != &other) {
+            std::destroy_n(bufferStart, capacity());
+            allocator_type().deallocate(bufferStart, capacity());
+
+            bufferStart = other.bufferStart;
+            gapStart = other.gapStart;
+            gapEnd = other.gapEnd;
+            bufferEnd = other.bufferEnd;
+
+            other.bufferStart = nullptr;
+            other.gapStart = nullptr;
+            other.gapEnd = nullptr;
+            other.bufferEnd = nullptr;
+        }
+
+        return *this;
+    }
+
+    ~GapBuffer() noexcept {
+        std::destroy_n(bufferStart, capacity());
+        allocator_type().deallocate(bufferStart, capacity());
+    }
+
     constexpr reference at(const size_type pos) {
         if (pos >= size()) {
             throw std::out_of_range("Out of bounds");
         }
-
         const size_type gapStartIndex =
             static_cast<size_type>(gapStart - bufferStart);
         if (pos < gapStartIndex) {
@@ -212,7 +297,6 @@ public:
         if (pos >= size()) {
             throw std::out_of_range("Out of bounds");
         }
-
         const size_type gapStartIndex =
             static_cast<size_type>(gapStart - bufferStart);
         if (pos < gapStartIndex) {

@@ -68,9 +68,10 @@ private:
             if (ptr == gb->gapStart) {
                 ptr = gb->gapEnd;
             }
+            return *this;
         }
 
-        GapIterator& operator++(int) {
+        GapIterator operator++(int) {
             GapIterator tmp = *this;
             ++(*this);
             if (ptr == gb->gapStart) {
@@ -79,11 +80,12 @@ private:
             return *this;
         }
 
-        GapIterator operator--() {
+        GapIterator& operator--() {
             ptr -= 1;
             if (ptr == gb->gapEnd) {
                 ptr = gb->gapStart - 1;
             }
+            return *this;
         }
 
         GapIterator operator--(int) {
@@ -183,13 +185,12 @@ public:
         gapEnd = bufferEnd;
     }
 
-    constexpr explicit GapBuffer(std::string_view& str) {
-        bufferStart =
-            allocator_type().allocate(str.size() + 8); // str + gap (length 8)
-        std::uninitialized_copy_n(str.begin(), str.end(), bufferStart);
+    constexpr explicit GapBuffer(std::string_view str) {
+        bufferStart = allocator_type().allocate(str.size() + 8);
+        std::uninitialized_copy_n(str.begin(), str.size(), bufferStart);
+
         gapStart = bufferStart + str.size();
         gapEnd = gapStart + 8;
-
         bufferEnd = gapEnd;
     }
 
@@ -321,15 +322,15 @@ public:
     }
 
     iterator end() noexcept {
-        return reverse_iterator(this, bufferEnd);
+        return iterator(this, bufferEnd);
     }
 
     const_iterator end() const noexcept {
-        return const_reverse_iterator(this, bufferEnd);
+        return const_iterator(this, bufferEnd);
     }
 
     const_iterator cend() const noexcept {
-        return const_reverse_iterator(this, bufferEnd);
+        return const_iterator(this, bufferEnd);
     }
 
     // reverse iterators
@@ -349,8 +350,8 @@ public:
     }
 
     const_reverse_iterator rend() const noexcept {
-        return const_reverse_iterator(
-            iterator(this, (gapStart == bufferStart) ? gapEnd : bufferStart));
+        return const_reverse_iterator(const_iterator(
+            this, (gapStart == bufferStart) ? gapEnd : bufferStart));
     }
 
     // size ignoring the gap
@@ -358,11 +359,23 @@ public:
         return bufferEnd - bufferStart - (gapEnd - gapStart);
     }
 
+    constexpr size_type size() const {
+        return bufferEnd - bufferStart - (gapEnd - gapStart);
+    }
+
     constexpr size_type gapSize() {
         return static_cast<size_type>(gapEnd - gapStart);
     }
 
+    constexpr size_type gapSize() const {
+        return static_cast<size_type>(gapEnd - gapStart);
+    }
+
     constexpr size_type capacity() {
+        return bufferEnd - bufferStart;
+    }
+
+    constexpr size_type capacity() const {
         return bufferEnd - bufferStart;
     }
 
@@ -398,13 +411,8 @@ public:
     constexpr std::string to_string() {
         std::string ret;
         ret.reserve(size()); // reserve size of buffer w/o gap for performance
-
-        auto cIt = const_iterator(this, bufferStart);
-        size_t index = 0;
-        while (cIt != bufferEnd) {
-            ret[index++] = *cIt++;
-        }
-
+        ret.append(bufferStart, (gapStart - bufferStart));
+        ret.append(gapEnd, (bufferEnd - gapEnd));
         return ret;
     }
 

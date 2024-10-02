@@ -121,7 +121,7 @@ private:
         // difference between iterators !! accounting for gap
         difference_type operator-(const GapIterator& other) const {
             // if both before gap
-            if (ptr < gb->gabStart && other.ptr < gb->gapStart) {
+            if (ptr < gb->gapStart && other.ptr < gb->gapStart) {
                 return ptr - other.ptr;
             }
             // if both after gap
@@ -199,7 +199,7 @@ public:
         const size_type len = std::distance(start, end);
 
         bufferStart =
-            allocator_type().allocate(len + 8); // range + gab (length 8)
+            allocator_type().allocate(len + 8); // range + gap (length 8)
         std::uninitialized_copy_n(start, len, bufferStart);
 
         gapStart = bufferStart + len;
@@ -426,6 +426,7 @@ public:
         std::uninitialized_copy_n(pos.ptr, gapStart - pos.ptr,
                                   pos.ptr + 1); // move [pos, end) over 1
         *pos.ptr = value;
+        gapStart++;
     }
 
     constexpr void insert(iterator pos, std::string_view str) {

@@ -165,3 +165,53 @@ TEST_F(GapBufferTest, Rbegin) {
     EXPECT_EQ(*gb.rbegin(), 'd');
     EXPECT_EQ(*(gb.rbegin() + 3), 'o');
 }
+
+TEST_F(GapBufferTest, InsertChar) {
+    auto gb = GapBuffer();
+    gb.insert(gb.begin(), 'A');
+    EXPECT_EQ(gb.size(), 1);
+    EXPECT_EQ(gb.gapSize(), 32 - 1); // default is 32
+    EXPECT_EQ(gb.at(0), 'A');
+}
+
+TEST_F(GapBufferTest, InsertStr) {
+    auto gb = GapBuffer();
+    std::string input = "ABC";
+    gb.insert(gb.begin(), input);
+    EXPECT_EQ(gb.size(), input.size());
+    EXPECT_EQ(gb.gapSize(), 32 - input.size());
+
+    size_t i = 0;
+    for (const char& c : input) {
+        EXPECT_EQ(gb.at(i++), c);
+    }
+}
+
+TEST_F(GapBufferTest, EraseChar) {
+    GapBuffer gb;
+    gb.insert(gb.begin(), "ABC"); // Insert initial characters
+
+    // Erase the first character ('A')
+    gb.erase(gb.begin());
+
+    EXPECT_EQ(gb.size(), 2);         // Size should be reduced to 2
+    EXPECT_EQ(gb.gapSize(), 32 - 2); // Adjusted gap size
+    EXPECT_EQ(gb.at(0), 'B');        // The new first character should be 'B'
+    EXPECT_EQ(gb.at(1), 'C');        // The next character should still be 'C'
+}
+
+TEST_F(GapBufferTest, EraseStr) {
+    GapBuffer gb;
+    gb.insert(gb.begin(), "ABCDEFG"); // Insert initial characters
+
+    // Erase characters from index 1 to 3 ('B', 'C', 'D')
+    gb.erase(gb.begin() + 1, 3); // Erase 'BCD'
+
+    EXPECT_EQ(gb.size(),
+              4); // Remaining characters should be 'A', 'E', 'F', 'G'
+    EXPECT_EQ(gb.gapSize(), 32 - 4); // Adjusted gap size
+    EXPECT_EQ(gb.at(0), 'A');        // First character should be 'A'
+    EXPECT_EQ(gb.at(1), 'E');        // Next character should be 'E'
+    EXPECT_EQ(gb.at(2), 'F');        // Next character should be 'F'
+    EXPECT_EQ(gb.at(3), 'G');        // Last character should be 'G'
+}

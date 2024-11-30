@@ -97,46 +97,32 @@ private:
             return tmp;
         }
 
-        // provides functionality for it + value
-        GapIterator operator+(const int val) {
-            GapIterator tmp = *this;
-            return tmp += val;
+        GapIterator operator+(difference_type val) const {
+            pointer newPtr = ptr + val;
+            if (ptr <= gb->gapStart && newPtr > gb->gapStart) {
+                newPtr += gb->gapEnd - gb->gapStart; // Skip the gap
+            }
+            return GapIterator(gb, newPtr);
         }
 
-        GapIterator operator+(const difference_type other) const {
-            return GapBuffer(gb, ptr + other);
-        }
-
-        // provides functionality for value + it
-        friend GapIterator operator+(const difference_type val,
-                                     const GapIterator& other) {
-            return other + val;
-        }
-
-        GapIterator operator-(const int val) {
-            GapIterator tmp = *this;
-            return tmp -= val;
+        GapIterator operator-(difference_type val) const {
+            pointer newPtr = ptr - val;
+            if (ptr >= gb->gapEnd && newPtr < gb->gapEnd) {
+                newPtr -= gb->gapEnd - gb->gapStart; // Skip the gap
+            }
+            return GapIterator(gb, newPtr);
         }
 
         difference_type operator-(const GapIterator& other) const {
-            if (ptr < gb->gapStart && other.ptr < gb->gapStart) {
+            if (ptr <= gb->gapStart && other.ptr <= gb->gapStart) {
                 return ptr - other.ptr;
-            } else if (ptr > gb->gapEnd && other.ptr > gb->gapEnd) {
-                return ptr - other.ptr;
-            } else {
-                return (ptr < gb->gapStart)
-                           ? (gb->gapStart - other.ptr) + (gb->gapEnd - ptr)
-                           : (ptr - gb->gapEnd) + (other.ptr - gb->gapStart);
             }
-        }
-
-        GapIterator operator-(const difference_type other) const {
-            return GapIterator(gb, ptr - other);
-        }
-
-        friend GapIterator operator-(const difference_type value,
-                                     const GapIterator& other) {
-            return other - value;
+            if (ptr >= gb->gapEnd && other.ptr >= gb->gapEnd) {
+                return ptr - other.ptr;
+            }
+            return (ptr < gb->gapStart)
+                       ? (ptr - other.ptr) - (gb->gapEnd - gb->gapStart)
+                       : (ptr - gb->gapEnd) + (gb->gapStart - other.ptr);
         }
 
         GapIterator& operator+=(difference_type val) {
@@ -381,68 +367,37 @@ public:
     }
 
     // TODO problem with resizing when cursor is at very end
-    void resize(const size_type count) {
-        if (count <= size()) {
-            return; // No need to resize if the current capacity is sufficient
+    void resize(const size_type newCapacity) {
+        if (newCapacity <= capacity()) {
+            return; // No resizing needed
         }
 
-        // Allocate new memory
-        pointer newMem = allocator_type().allocate(count);
-        // Calculate prefix and suffix sizes around the gap
+        // Allocate new buffer
+        pointer newBuffer = allocator_type().allocate(newCapacity);
+        assert(newBuffer != nullptr);
+
         size_type prefixSize = gapStart - bufferStart;
         size_type suffixSize = bufferEnd - gapEnd;
 
-        // Debug output for allocation
-        std::cout << "Allocating new buffer: " << static_cast<void*>(newMem)
-                  << "\n";
+        // Copy elements before and after the gap
+        std::uninitialized_copy_n(bufferStart, prefixSize, newBuffer);
+        std::uninitialized_copy_n(gapEnd, suffixSize,
+                                  newBuffer + newCapacity - suffixSize);
 
-        // Copy the existing content before and after the gap into the new
-        // buffer
-        if (gapEnd < bufferEnd) {
-            std::cout << "GAP NOT AT END\n";
-            std::uninitialized_copy_n(bufferStart, prefixSize,
-                                      newMem); // Copy before gap
-            std::uninitialized_copy_n(gapEnd, suffixSize,
-                                      newMem + prefixSize); // Copy after gap
-        } else {
-            std::cout << "GAP AT END\n";
-            std::uninitialized_copy_n(bufferStart, prefixSize,
-                                      newMem); // Copy all
-            std::cout << "MEM COPIED\n";
-        }
+        // Destroy and deallocate old buffer
+        std::destroy_n(bufferStart, capacity());
+        allocator_type().deallocate(bufferStart, capacity());
 
-        print_with_gap();
-        // Debug output for old buffer pointers
-        std::cout << "Before deallocation:\n";
-        std::cout << "Buffer Start: " << static_cast<void*>(bufferStart)
-                  << "\n";
-
-        // Safely deallocate the old buffer
-        if (bufferStart != nullptr) {
-            std::cout << "Deallocating old buffer: "
-                      << static_cast<void*>(bufferStart) << "\n";
-            allocator_type().deallocate(bufferStart, capacity());
-            bufferStart = nullptr; // Avoid dangling pointer and double free
-        }
-
-        // Update buffer pointers to the new memory
-        bufferStart = newMem;
-        bufferEnd = newMem + count;
-
-        // Adjust gap positions in the new buffer
+        // Update buffer pointers
+        bufferStart = newBuffer;
         gapStart = bufferStart + prefixSize;
-        gapEnd = gapStart + (count - prefixSize - suffixSize);
+        gapEnd = bufferStart + newCapacity - suffixSize;
+        bufferEnd = bufferStart + newCapacity;
 
-        // Debug output for new buffer pointers
-        std::cout << "After adjustment:\n";
-        std::cout << "Buffer Start: " << static_cast<void*>(bufferStart)
-                  << "\n";
-        std::cout << "Gap Start: " << (gapStart - bufferStart) << "\n";
-        std::cout << "Gap End: " << (gapEnd - bufferStart) << "\n";
-        std::cout << "Buffer End: " << (bufferEnd - bufferStart) << "\n";
-    }
-
-    // cannot be string_view because sv locally dangles
+        assert(bufferStart != nullptr);
+        assert(bufferEnd == bufferStart + newCapacity);
+        assert(gapStart <= gapEnd);
+    } // cannot be string_view because sv locally dangles
     constexpr std::string to_string() const {
         std::string ret;
         ret.reserve(size()); // reserve size of buffer w/o gap for performance
@@ -451,48 +406,23 @@ public:
         return ret;
     }
 
-    // TODO unsure of how
-    /*
-    constexpr void insert(iterator pos, const_reference value) {
-        if (gapSize() <= 1) {
-            int posLen = pos - begin();
-            resize(capacity() * 2);
-            pos = begin() + posLen + 1;
-        }
-
-        std::uninitialized_copy_n(pos.ptr, gapStart - pos.ptr,
-                                  pos.ptr + 1); // move [pos, end) over 1
-        *pos.ptr = value;
-    }
-    */
-
     constexpr void insert(iterator pos, const char c) {
         if (gapSize() == 0) {
             int posLen = pos - begin();
             resize(capacity() * 2);
-            pos = begin() + posLen;
+            pos = begin() + posLen; // Adjust pos without adding unnecessary +1
         }
 
-        // Shift elements over to make space
-        if (pos.ptr < gapStart) {
-            std::uninitialized_copy_n(pos.ptr, gapStart - pos.ptr, pos.ptr + 1);
-        } else {
-            std::uninitialized_copy_n(pos.ptr, gapEnd - pos.ptr, pos.ptr + 1);
-        }
-        *pos.ptr = c;
-        gapStart++;
-    }
-
-    constexpr void insert(iterator pos, std::string_view str) {
-        if (gapSize() <= str.size()) {
-            int posLen = pos - begin();
-            resize(capacity() * 2);
-            pos = begin() + posLen + 1;
+        if (pos.ptr != gapStart) {
+            // Move the gap to the position of insertion
+            move_gap_to(pos.ptr);
         }
 
-        std::uninitialized_copy_n(pos.ptr, gapStart - pos.ptr, pos.ptr + 1);
-        std::copy(str.begin(), str.end(), pos.ptr);
-        gapStart += str.size();
+        // Place the value in the gap and adjust gapStart
+        *gapStart = c;
+        ++gapStart;
+
+        assert(gapStart >= bufferStart && gapStart <= gapEnd);
     }
 
     constexpr void erase(iterator pos) {
@@ -535,6 +465,24 @@ public:
         }
 
         std::cout << "\n";
+    }
+
+    void move_gap_to(pointer target) {
+        if (target < gapStart) {
+            // Move gap backward
+            size_type moveSize = gapStart - target;
+            std::uninitialized_copy_n(target, moveSize, gapEnd - moveSize);
+            std::destroy_n(target, moveSize);
+            gapStart = target;
+            gapEnd -= moveSize;
+        } else if (target > gapStart) {
+            // Move gap forward
+            size_type moveSize = target - gapStart;
+            std::uninitialized_copy_n(gapEnd, moveSize, gapStart);
+            std::destroy_n(gapEnd, moveSize);
+            gapStart += moveSize;
+            gapEnd += moveSize;
+        }
     }
 
 private:

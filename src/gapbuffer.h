@@ -438,7 +438,6 @@ public:
 
     constexpr void insert(iterator pos, const char c) {
         if (gapSize() <= 1) {
-            std::cout << "RESIZED @ " << c << "\n";
             int posLen = pos - begin();
             resize(capacity() * 2);
             pos = begin() + posLen;
@@ -456,7 +455,6 @@ public:
 
     constexpr void insert(iterator pos, std::string_view str) {
         if (gapSize() <= str.size()) {
-            std::cout << "RESIZED\n";
             int posLen = pos - begin();
             resize(capacity() * 2);
             pos = begin() + posLen + 1;

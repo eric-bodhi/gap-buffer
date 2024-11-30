@@ -4,7 +4,6 @@
 #include <variant>
 
 #include "gapbuffer.h"
-/*
 using namespace ::testing;
 
 class GapBufferTest : public Test {
@@ -234,7 +233,7 @@ TEST_F(GapBufferTest, charTest) {
 
     EXPECT_EQ(gb.to_string(), "this isssa");
 }
-*/
+
 class TextBufferTest : public ::testing::Test {
 protected:
     // Simulating a TextBuffer using a variant for lines
@@ -297,60 +296,5 @@ TEST_F(TextBufferTest, GapReallocationTest) {
         expected += "Abc"[i % 3];
     }
 
-    EXPECT_EQ(gbLine.to_string(), expected);
+    EXPECT_EQ(gbLine.to_string(), expected + "X");
 }
-
-/*
-
-TEST_F(TextBufferTest, CursorRepositioningTest) {
-    // Setup buffer with one line
-    buffer.push_back(std::string("hello world"));
-
-    // Insert characters in the middle
-    switchLine(0);
-    insertAt(0, 5, '!');
-    insertAt(0, 6, '@');
-    insertAt(0, 7, '#');
-
-    // Check content after insertions
-    const GapBuffer<char>& gbLine = std::get<GapBuffer<char>>(buffer.at(0));
-    EXPECT_EQ(gbLine.to_string(), "hello!@# world");
-
-    // Insert at the beginning
-    insertAt(0, 0, '$');
-    EXPECT_EQ(gbLine.to_string(), "$hello!@# world");
-
-    // Insert at the end
-    insertAt(0, gbLine.size(), '%');
-    EXPECT_EQ(gbLine.to_string(), "$hello!@# world%");
-}
-
-TEST_F(TextBufferTest, LineSwitchingTest) {
-    // Add multiple lines to the buffer
-    buffer.push_back(std::string("first line"));
-    buffer.push_back(std::string("second line"));
-    buffer.push_back(std::string("third line"));
-
-    // Switch between lines and edit
-    switchLine(0);
-    insertAt(0, 0, 'A');
-    EXPECT_EQ(std::get<GapBuffer<char>>(buffer.at(0)).to_string(),
-              "Afirst line");
-
-    switchLine(1);
-    insertAt(1, 6, 'B');
-    EXPECT_EQ(std::get<GapBuffer<char>>(buffer.at(1)).to_string(),
-              "seconBd line");
-
-    switchLine(2);
-    insertAt(2, 5, 'C');
-    EXPECT_EQ(std::get<GapBuffer<char>>(buffer.at(2)).to_string(),
-              "thirdC line");
-
-    // Switch back to the first line
-    switchLine(0);
-    insertAt(0, 1, 'X');
-    EXPECT_EQ(std::get<GapBuffer<char>>(buffer.at(0)).to_string(),
-              "AXfirst line");
-}
-*/

@@ -380,36 +380,66 @@ public:
         gapEnd = bufferEnd;
     }
 
+    // TODO problem with resizing when cursor is at very end
     void resize(const size_type count) {
         if (count <= size()) {
-            return;
+            return; // No need to resize if the current capacity is sufficient
         }
 
         // Allocate new memory
         pointer newMem = allocator_type().allocate(count);
-
         // Calculate prefix and suffix sizes around the gap
         size_type prefixSize = gapStart - bufferStart;
         size_type suffixSize = bufferEnd - gapEnd;
 
+        // Debug output for allocation
+        std::cout << "Allocating new buffer: " << static_cast<void*>(newMem)
+                  << "\n";
+
         // Copy the existing content before and after the gap into the new
         // buffer
-        std::uninitialized_copy_n(bufferStart, prefixSize,
-                                  newMem); // Copy before gap
-        std::uninitialized_copy_n(gapEnd, suffixSize,
-                                  newMem + prefixSize); // Copy after gap
+        if (gapEnd < bufferEnd) {
+            std::cout << "GAP NOT AT END\n";
+            std::uninitialized_copy_n(bufferStart, prefixSize,
+                                      newMem); // Copy before gap
+            std::uninitialized_copy_n(gapEnd, suffixSize,
+                                      newMem + prefixSize); // Copy after gap
+        } else {
+            std::cout << "GAP AT END\n";
+            std::uninitialized_copy_n(bufferStart, prefixSize,
+                                      newMem); // Copy all
+            std::cout << "MEM COPIED\n";
+        }
 
-        // Deallocate old buffer
-        std::destroy_n(bufferStart, capacity());
-        allocator_type().deallocate(bufferStart, capacity());
+        print_with_gap();
+        // Debug output for old buffer pointers
+        std::cout << "Before deallocation:\n";
+        std::cout << "Buffer Start: " << static_cast<void*>(bufferStart)
+                  << "\n";
 
-        // Update the buffer pointers
+        // Safely deallocate the old buffer
+        if (bufferStart != nullptr) {
+            std::cout << "Deallocating old buffer: "
+                      << static_cast<void*>(bufferStart) << "\n";
+            allocator_type().deallocate(bufferStart, capacity());
+            bufferStart = nullptr; // Avoid dangling pointer and double free
+        }
+
+        // Update buffer pointers to the new memory
         bufferStart = newMem;
         bufferEnd = newMem + count;
 
         // Adjust gap positions in the new buffer
         gapStart = bufferStart + prefixSize;
         gapEnd = gapStart + (count - prefixSize - suffixSize);
+
+        // Debug output for new buffer pointers
+        std::cout << "After adjustment:\n";
+        std::cout << "Buffer Start: " << static_cast<void*>(bufferStart)
+                  << "\n";
+        std::cout << "Gap Start: " << (gapStart - bufferStart) << "\n";
+        std::cout << "Gap End: " << (gapEnd - bufferStart) << "\n";
+        std::cout << "Buffer End: " << (bufferEnd - bufferStart) << "\n";
     }
 
     // cannot be string_view because sv locally dangles
@@ -437,7 +467,7 @@ public:
     */
 
     constexpr void insert(iterator pos, const char c) {
-        if (gapSize() <= 1) {
+        if (gapSize() == 0) {
             int posLen = pos - begin();
             resize(capacity() * 2);
             pos = begin() + posLen;
@@ -481,6 +511,30 @@ public:
         }
         *gapStart = value;
         gapStart++;
+    }
+
+    void print_with_gap() {
+        pointer current = bufferStart;
+
+        // Print characters before the gap (bufferStart to gapStart)
+        while (current < gapStart) {
+            std::cout << *current;
+            ++current;
+        }
+
+        // Print the gap as '_'
+        while (current < gapEnd) {
+            std::cout << '_';
+            ++current;
+        }
+
+        // Print characters after the gap (gapEnd to bufferEnd)
+        while (current < bufferEnd) {
+            std::cout << *current;
+            ++current;
+        }
+
+        std::cout << "\n";
     }
 
 private:

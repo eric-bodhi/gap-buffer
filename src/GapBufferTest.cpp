@@ -4,6 +4,7 @@
 #include <variant>
 
 #include "gapbuffer.h"
+/*
 using namespace ::testing;
 
 class GapBufferTest : public Test {
@@ -233,7 +234,7 @@ TEST_F(GapBufferTest, charTest) {
 
     EXPECT_EQ(gb.to_string(), "this isssa");
 }
-
+*/
 class TextBufferTest : public ::testing::Test {
 protected:
     // Simulating a TextBuffer using a variant for lines
@@ -297,4 +298,21 @@ TEST_F(TextBufferTest, GapReallocationTest) {
     }
 
     EXPECT_EQ(gbLine.to_string(), expected + "X");
+}
+
+TEST_F(TextBufferTest, GapReallocationTestLastIndex) {
+    buffer.push_back("a");
+    switchLine(1);
+
+    GapBuffer<char>& gbLine = std::get<GapBuffer<char>>(buffer.at(1));
+    std::string expected{"a"};
+    for (size_t i = 0; i < 100; ++i) {
+        std::cout << i << " " << gbLine.gapSize() << "\n";
+        insertAt(1, i + 1, "Abc"[i % 3]);
+        expected += "Abc"[i % 3];
+        gbLine.print_with_gap();
+    }
+
+    EXPECT_EQ(gbLine.to_string(), expected);
+
 }

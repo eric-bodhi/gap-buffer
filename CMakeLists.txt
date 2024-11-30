@@ -31,6 +31,12 @@ enable_testing()
 
 # Add test cases
 add_test(
-        NAME GapBufferTests 
+        NAME GapBufferTests
         COMMAND gbtest
+)
+
+# Add a custom command to run tests with Valgrind via CTest
+add_test(
+    NAME GapBufferTestsValgrind
+    COMMAND valgrind --track-origins=yes --leak-check=full --log-file=valgrind_output.txt ./gbtest
 )

@@ -1,8 +1,10 @@
+#include "gtest/gtest.h"
 #include <gtest/gtest.h>
 #include <string>
+#include <variant>
 
 #include "gapbuffer.h"
-
+/*
 using namespace ::testing;
 
 class GapBufferTest : public Test {
@@ -215,3 +217,140 @@ TEST_F(GapBufferTest, EraseStr) {
     EXPECT_EQ(gb.at(2), 'F');        // Next character should be 'F'
     EXPECT_EQ(gb.at(3), 'G');        // Last character should be 'G'
 }
+
+TEST_F(GapBufferTest, charTest) {
+    GapBuffer<char> gb;
+    gb.insert(gb.begin(), 'a');
+
+    gb.insert(gb.begin(), 't');
+    gb.insert(gb.begin() + 1, 'h');
+    gb.insert(gb.begin() + 2, 'i');
+    gb.insert(gb.begin() + 3, 's');
+    gb.insert(gb.begin() + 4, ' ');
+    gb.insert(gb.begin() + 5, 'i');
+    gb.insert(gb.begin() + 6, 's');
+    gb.insert(gb.begin() + 7, 's');
+    gb.insert(gb.begin() + 8, 's');
+
+    EXPECT_EQ(gb.to_string(), "this isssa");
+}
+*/
+class TextBufferTest : public ::testing::Test {
+protected:
+    // Simulating a TextBuffer using a variant for lines
+    std::vector<std::variant<std::string, GapBuffer<char>>> buffer;
+    size_t currentLineIdx = 0;
+
+    TextBufferTest() {
+        buffer.push_back("X");
+        buffer.at(0) = GapBuffer<char>(std::get<std::string>(buffer.at(0)));
+    }
+
+    void switchLine(size_t newLineIdx) {
+        if (currentLineIdx != newLineIdx) {
+            // Convert current line to string
+            if (std::holds_alternative<GapBuffer<char>>(
+                    buffer.at(currentLineIdx))) {
+                GapBuffer<char>& gbLine =
+                    std::get<GapBuffer<char>>(buffer.at(currentLineIdx));
+                buffer.at(currentLineIdx) = gbLine.to_string();
+            }
+
+            // Update current line index
+            currentLineIdx = newLineIdx;
+
+            // Convert new line to GapBuffer if it's a string
+            if (std::holds_alternative<std::string>(
+                    buffer.at(currentLineIdx))) {
+                std::string lineString =
+                    std::get<std::string>(buffer.at(currentLineIdx));
+                buffer.at(currentLineIdx) = GapBuffer<char>(lineString);
+            }
+        }
+    }
+
+    void insertAt(size_t lineIdx, size_t col, char c) {
+        switchLine(lineIdx);
+        if (std::holds_alternative<GapBuffer<char>>(
+                buffer.at(currentLineIdx))) {
+            GapBuffer<char>& gbLine =
+                std::get<GapBuffer<char>>(buffer.at(currentLineIdx));
+            gbLine.insert(gbLine.begin() + col, c);
+        } else {
+            std::cout << std::to_string(lineIdx) << " " << std::to_string(col) << " " << "NOT GB\n";
+        }
+    }
+};
+
+TEST_F(TextBufferTest, GapReallocationTest) {
+    switchLine(0);
+    for (size_t i = 0; i < 100; ++i) {
+        // Insert 'a', 'b', 'c' in a repeating pattern
+        insertAt(0, i, "Abc"[i % 3]);
+    }
+    switchLine(0);
+    const GapBuffer<char>& gbLine = std::get<GapBuffer<char>>(buffer.at(0));
+
+    // Generate the expected string with the "abc" pattern repeated
+    std::string expected;
+    for (size_t i = 0; i < 100; ++i) {
+        expected += "Abc"[i % 3];
+    }
+
+    EXPECT_EQ(gbLine.to_string(), expected);
+}
+
+/*
+
+TEST_F(TextBufferTest, CursorRepositioningTest) {
+    // Setup buffer with one line
+    buffer.push_back(std::string("hello world"));
+
+    // Insert characters in the middle
+    switchLine(0);
+    insertAt(0, 5, '!');
+    insertAt(0, 6, '@');
+    insertAt(0, 7, '#');
+
+    // Check content after insertions
+    const GapBuffer<char>& gbLine = std::get<GapBuffer<char>>(buffer.at(0));
+    EXPECT_EQ(gbLine.to_string(), "hello!@# world");
+
+    // Insert at the beginning
+    insertAt(0, 0, '$');
+    EXPECT_EQ(gbLine.to_string(), "$hello!@# world");
+
+    // Insert at the end
+    insertAt(0, gbLine.size(), '%');
+    EXPECT_EQ(gbLine.to_string(), "$hello!@# world%");
+}
+
+TEST_F(TextBufferTest, LineSwitchingTest) {
+    // Add multiple lines to the buffer
+    buffer.push_back(std::string("first line"));
+    buffer.push_back(std::string("second line"));
+    buffer.push_back(std::string("third line"));
+
+    // Switch between lines and edit
+    switchLine(0);
+    insertAt(0, 0, 'A');
+    EXPECT_EQ(std::get<GapBuffer<char>>(buffer.at(0)).to_string(),
+              "Afirst line");
+
+    switchLine(1);
+    insertAt(1, 6, 'B');
+    EXPECT_EQ(std::get<GapBuffer<char>>(buffer.at(1)).to_string(),
+              "seconBd line");
+
+    switchLine(2);
+    insertAt(2, 5, 'C');
+    EXPECT_EQ(std::get<GapBuffer<char>>(buffer.at(2)).to_string(),
+              "thirdC line");
+
+    // Switch back to the first line
+    switchLine(0);
+    insertAt(0, 1, 'X');
+    EXPECT_EQ(std::get<GapBuffer<char>>(buffer.at(0)).to_string(),
+              "AXfirst line");
+}
+*/

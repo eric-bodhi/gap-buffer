@@ -118,20 +118,15 @@ private:
             return tmp -= val;
         }
 
-        // difference between iterators !! accounting for gap
         difference_type operator-(const GapIterator& other) const {
-            // if both before gap
             if (ptr < gb->gapStart && other.ptr < gb->gapStart) {
                 return ptr - other.ptr;
-            }
-            // if both after gap
-            else if (ptr > gb->gapEnd && other.ptr > gb->gapEnd) {
+            } else if (ptr > gb->gapEnd && other.ptr > gb->gapEnd) {
                 return ptr - other.ptr;
-            }
-            // if on opposite sides of gap
-            // total distance WITHOUT the gap
-            else {
-                return (gb->gapStart - other.ptr) + (ptr - gb->gapEnd);
+            } else {
+                return (ptr < gb->gapStart)
+                           ? (gb->gapStart - other.ptr) + (gb->gapEnd - ptr)
+                           : (ptr - gb->gapEnd) + (other.ptr - gb->gapStart);
             }
         }
 
@@ -385,30 +380,40 @@ public:
         gapEnd = bufferEnd;
     }
 
-    constexpr void resize(const size_type count) {
+    void resize(const size_type count) {
         if (count <= size()) {
             return;
         }
 
-        pointer newMem =
-            allocator_type().allocate(count); // acts as newBufferStart
+        // Allocate new memory
+        pointer newMem = allocator_type().allocate(count);
 
+        // Calculate prefix and suffix sizes around the gap
         size_type prefixSize = gapStart - bufferStart;
         size_type suffixSize = bufferEnd - gapEnd;
-        std::uninitialized_copy_n(bufferStart, prefixSize, newMem);
-        std::uninitialized_copy_n(gapEnd, suffixSize,
-                                  newMem + prefixSize + (count - capacity()));
 
+        // Copy the existing content before and after the gap into the new
+        // buffer
+        std::uninitialized_copy_n(bufferStart, prefixSize,
+                                  newMem); // Copy before gap
+        std::uninitialized_copy_n(gapEnd, suffixSize,
+                                  newMem + prefixSize); // Copy after gap
+
+        // Deallocate old buffer
+        std::destroy_n(bufferStart, capacity());
         allocator_type().deallocate(bufferStart, capacity());
 
-        gapStart = newMem + prefixSize;
-        gapEnd = gapStart + (count - capacity());
+        // Update the buffer pointers
         bufferStart = newMem;
         bufferEnd = newMem + count;
+
+        // Adjust gap positions in the new buffer
+        gapStart = bufferStart + prefixSize;
+        gapEnd = gapStart + (count - prefixSize - suffixSize);
     }
 
     // cannot be string_view because sv locally dangles
-    constexpr std::string to_string() {
+    constexpr std::string to_string() const {
         std::string ret;
         ret.reserve(size()); // reserve size of buffer w/o gap for performance
         ret.append(bufferStart, (gapStart - bufferStart));
@@ -416,6 +421,8 @@ public:
         return ret;
     }
 
+    // TODO unsure of how
+    /*
     constexpr void insert(iterator pos, const_reference value) {
         if (gapSize() <= 1) {
             int posLen = pos - begin();
@@ -426,21 +433,37 @@ public:
         std::uninitialized_copy_n(pos.ptr, gapStart - pos.ptr,
                                   pos.ptr + 1); // move [pos, end) over 1
         *pos.ptr = value;
+    }
+    */
+
+    constexpr void insert(iterator pos, const char c) {
+        if (gapSize() <= 1) {
+            std::cout << "RESIZED @ " << c << "\n";
+            int posLen = pos - begin();
+            resize(capacity() * 2);
+            pos = begin() + posLen;
+        }
+
+        // Shift elements over to make space
+        if (pos.ptr < gapStart) {
+            std::uninitialized_copy_n(pos.ptr, gapStart - pos.ptr, pos.ptr + 1);
+        } else {
+            std::uninitialized_copy_n(pos.ptr, gapEnd - pos.ptr, pos.ptr + 1);
+        }
+        *pos.ptr = c;
         gapStart++;
     }
 
     constexpr void insert(iterator pos, std::string_view str) {
         if (gapSize() <= str.size()) {
+            std::cout << "RESIZED\n";
             int posLen = pos - begin();
             resize(capacity() * 2);
             pos = begin() + posLen + 1;
         }
 
-        std::uninitialized_copy_n(
-            pos.ptr, gapStart - pos.ptr,
-            pos.ptr + str.size()); // move [pos, end) over length of str
-        std::copy(str.begin(), str.end(),
-                  pos.ptr); // copy string to space of length str made
+        std::uninitialized_copy_n(pos.ptr, gapStart - pos.ptr, pos.ptr + 1);
+        std::copy(str.begin(), str.end(), pos.ptr);
         gapStart += str.size();
     }
 

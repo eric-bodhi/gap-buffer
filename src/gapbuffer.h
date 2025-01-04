@@ -254,10 +254,16 @@ public:
 
         return *this;
     }
-
-    ~GapBuffer() noexcept {
-        std::destroy_n(bufferStart, capacity());
-        allocator_type().deallocate(bufferStart, capacity());
+    ~GapBuffer() {
+        std::cout << "Destructor called\n";
+        std::cout << "bufferStart: " << bufferStart << "\n";
+        std::cout << "gapStart: " << gapStart << "\n";
+        std::cout << "gapEnd: " << gapEnd << "\n";
+        std::cout << "bufferEnd: " << bufferEnd << "\n";
+        if (bufferStart) {
+            delete[] bufferStart;
+        }
+        bufferStart = gapStart = gapEnd = bufferEnd = nullptr;
     }
 
     constexpr reference at(const size_type pos) {

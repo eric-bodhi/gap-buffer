@@ -3,6 +3,9 @@
 #include <string>
 #include <stdexcept>
 
+Gb::Gb(const std::string& string, const size_t& cursor) {
+
+}
 void Gb::move_cursor(size_t index) {
     // if cursor in same position
     if (index == left.size()) {

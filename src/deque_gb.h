@@ -8,6 +8,8 @@ private:
     // moving cursor through index of full string with no gap (left + right)
     //
 public:
+    Gb(const std::string& string = "", const size_t& cursor = 0);
+
     void move_cursor(size_t index);
     void move_left();
     void move_right();
